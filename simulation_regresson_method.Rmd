@@ -1,0 +1,80 @@
+---
+title: "simulation-regression-method"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+---
+```{r include=FALSE}
+library(tidyverse)
+```
+
+## simulate dataset for regression
+
+```{r}
+#generate x1
+X1 = rnorm(100,mean=3,sd=1)
+#generate x2
+X2 = rnorm(100,mean=2,sd=2)
+#generate x3(highly correlated with x2)
+X3 = 0.1*X2^2+1
+#generate x4
+X4 =rnorm(100,mean=3,sd=1.5)
+#generate y
+eps = rnorm(100,mean=0,sd=2)
+Y = 2+1.5*X1+2*X3+0.75*X4+eps
+#X matrix
+data=data.frame(Y,X1,X2,X3,X4)
+```
+
+## Model1-Two-stage regression
+
+```{r pressure, echo=FALSE}
+#multivariate regression
+reg = lm(Y~X1+X2+X3+X4,data)
+summary(reg)
+```
+
+```{r}
+reg_step1 = lm(Y~X1+X2+X3,data)
+data = data%>%mutate(residual_Y = Y- predict(reg_step1))
+reg_step2 = lm(X4~X1+X2+X3,data)
+data = data%>%mutate(residual_X4 = X4- predict(reg_step2))
+reg_step3 = lm(residual_Y~residual_X4,data)
+summary(reg_step3)
+```
+
+Comparing the result, we can see the coefficient of the fourth parameter(X4) calculated by two-stage regression is the same as the result in multivariate regression.
+
+
+## Model2: Successive orthogonalization
+
+
+
+```{r}
+##by definition
+Z=matrix(nrow=100,ncol=5)
+##can set any start point to find orthogonalized vectors
+Z[,1]=rep(1,100)
+R=matrix(nrow=100,ncol=4)
+cof0=Z[,1]%*%X1/(Z[,1]%*%Z[,1])
+Z[,2] = X1-cof0%*%Z[,1]
+```
+
+```{r}
+proj <- function(y, X, list=FALSE) {
+  if (is.vector(y)) y <- matrix(y, ncol=1)
+  if (is.vector(X)) X <- matrix(X, ncol=1)
+  XPX <- crossprod(X)
+  P <- X %*% MASS::ginv(XPX) %*% t(X)
+  if (!list) return(c(P %*% y))
+  else return(list(y=c(P %*% y), P=P))
+}
+Z[,3] <- X2 - proj(X2, Z[,1])-proj(X2,Z[,2])
+Z[,4] <- X3 - proj(X3, Z[,1]) - proj(X3, Z[,2])-proj(X3,Z[,3])
+Z[,5] <- X4 - proj(X4, Z[,1]) - proj(X4, Z[,2]) - proj(X4, Z[,3])-proj(X4,Z[,4])
+summary(lm(Y~Z[,5]))
+```
+
+
+Comparing the result, we can see the coefficient of the fourth parameter(X4) is the same as the result in multivariate regression.
