@@ -1,39 +1,51 @@
 ---
 title: "simulation-regression-method"
+author: "Jingyu Xu"
+date: "09/05/2020"
 output:
   html_document:
-    theme: flatly
-    highlight: tango
+    code_folding: hide
+    toc: yes
+editor_options: 
+  chunk_output_type: console
 ---
+
 ```{r include=FALSE}
 library(tidyverse)
 ```
 
+Overview: simulate a simple example to verify the equivalence of one stage multivariate regression and 2-stage regression, and also verify the equivalence of multivariate regression to the effects obtained from successive orthogonalization
+
 ## simulate dataset for regression
 
 ```{r}
-#generate x1
-X1 = rnorm(100,mean=3,sd=1)
-#generate x2
-X2 = rnorm(100,mean=2,sd=2)
-#generate x3(highly correlated with x2)
-X3 = 0.1*X2^2+1
-#generate x4
-X4 =rnorm(100,mean=3,sd=1.5)
-#generate y
+set.seed(111)
+Sigma <- diag(c(8,3,3,2),4,4)
+Sigma[1,2]=3
+Sigma[2,1]=3#X1 and x2 are correlated 
+X =MASS::mvrnorm(n=100, c(2, 2,2,3), Sigma)%>%as.data.frame()
+colnames(X)=c("X1","X2","X3","X4")
+X1 =X[,1]
+X2 =X[,2]
+X3 =X[,3]
+X4= X[,4]
+#generate Y
 eps = rnorm(100,mean=0,sd=2)
 Y = 2+1.5*X1+2*X3+0.75*X4+eps
-#X matrix
-data=data.frame(Y,X1,X2,X3,X4)
+data=data.frame(X,Y)
 ```
 
 ## Model1-Two-stage regression
+
+**result of multivariate regression**
 
 ```{r pressure, echo=FALSE}
 #multivariate regression
 reg = lm(Y~X1+X2+X3+X4,data)
 summary(reg)
 ```
+
+**result of two-stage regression**
 
 ```{r}
 reg_step1 = lm(Y~X1+X2+X3,data)
@@ -49,19 +61,19 @@ Comparing the result, we can see the coefficient of the fourth parameter(X4) cal
 
 ## Model2: Successive orthogonalization
 
-
+### using projection
 
 ```{r}
-##by definition
+##initial point
 Z=matrix(nrow=100,ncol=5)
-##can set any start point to find orthogonalized vectors
-Z[,1]=rep(1,100)
+Z[,1]=rep(1,100)##intercept
 R=matrix(nrow=100,ncol=4)
 cof0=Z[,1]%*%X1/(Z[,1]%*%Z[,1])
 Z[,2] = X1-cof0%*%Z[,1]
 ```
 
 ```{r}
+##using projection
 proj <- function(y, X, list=FALSE) {
   if (is.vector(y)) y <- matrix(y, ncol=1)
   if (is.vector(X)) X <- matrix(X, ncol=1)
@@ -77,4 +89,26 @@ summary(lm(Y~Z[,5]))
 ```
 
 
-Comparing the result, we can see the coefficient of the fourth parameter(X4) is the same as the result in multivariate regression.
+
+### follow formula of Gram-Schmidt Orthogonalization
+
+```{r}
+##directly use the definition of the Gram-Schmidt Orthogonalization 
+##start point
+Z1=matrix(nrow=100,ncol=5)
+Z1[,1]=rep(1,100)##intercept
+X=as.matrix(X)
+Z1[,2:5]=X
+for (i in 1:ncol(X)) {
+r=NULL
+for(j in 1:i){
+  r[j] = Z1[,j]%*%X[,i]/(Z1[,j]%*%Z[,j])
+   ##caculate coefficient
+  Z1[,i+1]=Z1[,i+1]-r[j]%*%Z1[,j]
+}
+}
+summary(lm(formula = Y ~ Z1[, 5]))
+```
+
+
+Comparing the result, we can see the coefficient of the fourth parameter(X4) is the same as the result in multivariate regression. The two process above are exactly the same, which projects the pth covariate on the other orthogonalized covariates, reflecting the effect of the pth covariate adjusting other variables.
